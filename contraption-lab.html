@@ -216,6 +216,8 @@ const PARTS = {
   conveyor:{ name:'Conveyor',   desc:'Carries the ball along', len:150 },
   fan:     { name:'Fan',        desc:'Blows a steady gust', len:0 },
   bumper:  { name:'Bumper',     desc:'Pinball kick!',      len:0 },
+  cannon:  { name:'Cannon',     desc:'Catches, aims, FIRES', len:0 },
+  magnet:  { name:'Magnet',     desc:'Pulls the ball closer', len:0 },
 };
 
 /* ---------- levels ---------- */
@@ -275,11 +277,29 @@ const LEVELS = [
    statics:[ pl(450,548,900,0,14), pl(250,200,300,12,12), pl(650,330,300,-12,12) ],
    parts:{plank:2, tramp:1} },
 
- { name:'10 · Grand Finale',
-   hint:'Everything in the crate, one floating bucket on a high shelf. There are many ways to win — invent yours!',
+ { name:'10 · The Kitchen Sink',
+   hint:'Everything so far in the crate, one bucket on a high shelf. There are many ways to win — invent yours!',
    ball:{x:90,y:60}, bucket:{x:660,y:196},
    statics:[ pl(450,548,900,0,14), pl(320,420,260,90,16), pl(640,252,210,0,12) ],
    parts:{plank:2, tramp:1, fan:1, conveyor:1, bumper:1} },
+
+ { name:'11 · Cannonball Run',
+   hint:'New part! The <b>cannon</b> swallows any ball that rolls near its mouth, takes a breath, and fires it the way it points. Rotate to aim — that pedestal bucket wants an artillery arc.',
+   ball:{x:130,y:70}, bucket:{x:760,y:339},
+   statics:[ pl(450,548,900,0,14), pl(760,455,120,90,16) ],
+   parts:{cannon:1, plank:1} },
+
+ { name:'12 · Magnetic Personality',
+   hint:'New part! The <b>magnet</b> pulls the ball toward it from anywhere inside the dashed circle. Bend the falling ball over the hurdle and into the bucket.',
+   ball:{x:450,y:60}, bucket:{x:660,y:485},
+   statics:[ pl(450,548,900,0,14), pl(550,475,140,90,14) ],
+   parts:{magnet:1, plank:1} },
+
+ { name:'13 · The Gauntlet',
+   hint:'The full arsenal versus one enormous wall and a shelf-top bucket. Bounce over it, lob a cannonball, bend the arc with magnetism — or all three. Grand finale!',
+   ball:{x:110,y:60}, bucket:{x:700,y:204},
+   statics:[ pl(450,548,900,0,14), pl(450,390,320,90,16), pl(700,260,200,0,12) ],
+   parts:{cannon:1, magnet:1, plank:1, tramp:1} },
 ];
 
 /* ---------- state ---------- */
@@ -350,20 +370,46 @@ function allSegments(){
 /* ---------- physics ---------- */
 function resetBall(){
   const lv = LEVELS[levelIdx];
-  ball = {x:lv.ball.x, y:lv.ball.y, vx:0, vy:0};
+  ball = {x:lv.ball.x, y:lv.ball.y, vx:0, vy:0, held:null};
+  for(const p of placed){ p.cool=0; p.loadT=0; p.flash=0; }
   trail = []; dwell=0; stuckT=0; runT=0;
 }
 function physStep(dt){
   runT += dt;
-  // fans
+  // cannon: held ball → countdown → fire
+  if(ball.held){
+    const p = ball.held;
+    ball.x = p.x; ball.y = p.y; ball.vx = 0; ball.vy = 0;
+    p.loadT -= dt;
+    if(p.loadT <= 0){
+      const c = Math.cos(p.angle), s = Math.sin(p.angle);
+      ball.x = p.x + c*32; ball.y = p.y + s*32;
+      ball.vx = c*700; ball.vy = s*700;
+      p.cool = 0.9; p.flash = 0.25; ball.held = null;
+      blip(110,0.22,'square',0.12); blip(440,0.08,'triangle',0.05);
+    }
+    return null;
+  }
   for(const p of placed){
-    if(p.type!=='fan') continue;
-    const dx=ball.x-p.x, dy=ball.y-p.y;
-    const c=Math.cos(p.angle), s=Math.sin(p.angle);
-    const along = dx*c+dy*s, perp = -dx*s+dy*c;
-    if(along>10 && along<220 && Math.abs(perp)<58){
-      const f = 900*(1-along/220);
-      ball.vx += c*f*dt; ball.vy += s*f*dt;
+    if(p.type==='cannon') p.cool = Math.max(0,(p.cool||0)-dt);
+  }
+  // fans push, magnets pull
+  for(const p of placed){
+    if(p.type==='fan'){
+      const dx=ball.x-p.x, dy=ball.y-p.y;
+      const c=Math.cos(p.angle), s=Math.sin(p.angle);
+      const along = dx*c+dy*s, perp = -dx*s+dy*c;
+      if(along>10 && along<220 && Math.abs(perp)<58){
+        const f = 900*(1-along/220);
+        ball.vx += c*f*dt; ball.vy += s*f*dt;
+      }
+    }else if(p.type==='magnet'){
+      const dx=p.x-ball.x, dy=p.y-ball.y;
+      const d = Math.hypot(dx,dy);
+      if(d>2 && d<200){
+        const f = 700*(1-d/200);
+        ball.vx += dx/d*f*dt; ball.vy += dy/d*f*dt;
+      }
     }
   }
   ball.vy += GRAV*dt;
@@ -404,19 +450,36 @@ function physStep(dt){
       ball.vy = ny*outN + ty*vt;
     }
   }
-  // bumpers
+  // bumpers, magnet cores, cannon capture
   for(const p of placed){
-    if(p.type!=='bumper') continue;
-    let nx=ball.x-p.x, ny=ball.y-p.y;
-    const d=Math.hypot(nx,ny), rr=BALL_R+22;
-    if(d===0||d>=rr) continue;
-    nx/=d; ny/=d;
-    ball.x = p.x+nx*rr; ball.y = p.y+ny*rr;
-    const vn = ball.vx*nx+ball.vy*ny;
-    if(vn<0){ ball.vx -= 2*vn*nx; ball.vy -= 2*vn*ny; }
-    ball.vx += nx*260; ball.vy += ny*260;
-    p.flash = 0.2;
-    blip(700,0.09,'square',0.06);
+    if(p.type==='bumper'){
+      let nx=ball.x-p.x, ny=ball.y-p.y;
+      const d=Math.hypot(nx,ny), rr=BALL_R+22;
+      if(d===0||d>=rr) continue;
+      nx/=d; ny/=d;
+      ball.x = p.x+nx*rr; ball.y = p.y+ny*rr;
+      const vn = ball.vx*nx+ball.vy*ny;
+      if(vn<0){ ball.vx -= 2*vn*nx; ball.vy -= 2*vn*ny; }
+      ball.vx += nx*260; ball.vy += ny*260;
+      p.flash = 0.2;
+      blip(700,0.09,'square',0.06);
+    }else if(p.type==='magnet'){
+      let nx=ball.x-p.x, ny=ball.y-p.y;
+      const d=Math.hypot(nx,ny), rr=BALL_R+15;
+      if(d===0||d>=rr) continue;
+      nx/=d; ny/=d;
+      ball.x = p.x+nx*rr; ball.y = p.y+ny*rr;
+      const vn = ball.vx*nx+ball.vy*ny;
+      if(vn<0){
+        ball.vx -= 1.25*vn*nx; ball.vy -= 1.25*vn*ny;
+        if(-vn>120) blip(520,0.05,'sine',0.04);
+      }
+    }else if(p.type==='cannon'){
+      if(!ball.held && p.cool<=0 && Math.hypot(ball.x-p.x,ball.y-p.y)<26){
+        ball.held = p; p.loadT = 0.5;
+        blip(660,0.07,'sine',0.06); blip(880,0.07,'sine',0.05);
+      }
+    }
   }
   // speed cap
   const sp = Math.hypot(ball.vx,ball.vy);
@@ -453,7 +516,7 @@ function drawGrid(){
   // corner stamp
   ctx.fillStyle='rgba(220,233,242,0.22)';
   ctx.font='10px ui-rounded, system-ui';
-  ctx.fillText('DWG № '+(levelIdx+1)+'/10 · CONTRAPTION LAB', 12, H-10);
+  ctx.fillText('DWG № '+(levelIdx+1)+'/'+LEVELS.length+' · CONTRAPTION LAB', 12, H-10);
 }
 function drawSeg(x,y,len,angle,kind,thick,part,t){
   ctx.save(); ctx.translate(x,y); ctx.rotate(angle);
@@ -511,6 +574,49 @@ function drawSeg(x,y,len,angle,kind,thick,part,t){
     ctx.fillStyle='#dce9f2';
     for(let i=0;i<3;i++){ ctx.rotate(Math.PI*2/3); rr(-2.5,2,5,12,2.5); ctx.fill(); }
     ctx.restore();
+  }else if(kind==='cannon'){
+    const fl = part && part.flash>0 ? part.flash/0.25 : 0;
+    // muzzle flash
+    if(fl>0){
+      ctx.fillStyle='rgba(255,182,72,'+fl+')';
+      ctx.beginPath(); ctx.arc(44,0,8+fl*10,0,7); ctx.fill();
+    }
+    // barrel
+    ctx.fillStyle='#33424d'; rr(-10,-11,46,22,9); ctx.fill();
+    ctx.strokeStyle='#1a242c'; ctx.lineWidth=2; rr(-10,-11,46,22,9); ctx.stroke();
+    ctx.fillStyle='#9fb7c9'; rr(28,-9,7,18,3); ctx.fill();
+    // loaded glow
+    if(part && part.loadT>0){
+      ctx.fillStyle='rgba(255,182,72,.8)';
+      ctx.beginPath(); ctx.arc(2,0,6,0,7); ctx.fill();
+    }
+    // base wheel
+    ctx.fillStyle='#56707f';
+    ctx.beginPath(); ctx.arc(-2,9,10,0,7); ctx.fill();
+    ctx.strokeStyle='#22323c'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(-2,9,10,0,7); ctx.stroke();
+    ctx.fillStyle='#dce9f2';
+    ctx.beginPath(); ctx.arc(-2,9,3,0,7); ctx.fill();
+  }else if(kind==='magnet'){
+    // field circle (matches physics radius 190)
+    ctx.strokeStyle='rgba(224,86,74,.16)'; ctx.setLineDash([4,8]); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,0,200,0,7); ctx.stroke();
+    ctx.strokeStyle='rgba(224,86,74,.3)';
+    ctx.beginPath(); ctx.arc(0,0,26+((t*22)%14),0,7); ctx.stroke();
+    ctx.setLineDash([]);
+    // horseshoe
+    ctx.strokeStyle='#e0564a'; ctx.lineWidth=9; ctx.lineCap='butt';
+    ctx.beginPath(); ctx.arc(0,-2,10,Math.PI,Math.PI*2);
+    ctx.moveTo(-10,-2); ctx.lineTo(-10,10);
+    ctx.moveTo(10,-2); ctx.lineTo(10,10);
+    ctx.stroke();
+    // silver tips
+    ctx.fillStyle='#dce9f2';
+    rr(-15,8,10,7,2); ctx.fill();
+    rr(5,8,10,7,2); ctx.fill();
+    ctx.strokeStyle='#56707f'; ctx.lineWidth=1.5;
+    rr(-15,8,10,7,2); ctx.stroke();
+    rr(5,8,10,7,2); ctx.stroke();
   }else if(kind==='bumper'){
     const fl = part && part.flash>0 ? part.flash/0.2 : 0;
     ctx.fillStyle='#e0564a';
@@ -620,7 +726,7 @@ function endRun(result){
     const last = levelIdx===LEVELS.length-1;
     document.getElementById('ovTitle').textContent = last ? 'Machine mastered! 🏆' : 'Level complete!';
     document.getElementById('ovText').textContent = last
-      ? 'All ten contraptions built. Rube Goldberg salutes you.'
+      ? 'All thirteen contraptions built. Rube Goldberg salutes you.'
       : pickPraise();
     document.getElementById('ovBtn').textContent = last ? '⟲ Play again from level 1' : 'Next level →';
     document.getElementById('overlay').classList.add('show');
@@ -683,6 +789,8 @@ const PART_ICONS = {
   conveyor:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="2" y="7" width="30" height="9" rx="4.5" fill="#3c4a57"/><circle cx="7" cy="11.5" r="2.2" fill="#9fb7c9"/><circle cx="27" cy="11.5" r="2.2" fill="#9fb7c9"/><path d="M14 9 l3 2.5 -3 2.5" stroke="#ffb648" stroke-width="1.6" fill="none"/></svg>',
   fan:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="4" y="3" width="12" height="16" rx="3" fill="#56707f"/><circle cx="10" cy="11" r="4" fill="#dce9f2"/><path d="M19 7h9M19 11h12M19 15h9" stroke="#9fb7c9" stroke-width="1.6"/></svg>',
   bumper:'<svg width="34" height="22" viewBox="0 0 34 22"><circle cx="17" cy="11" r="8.5" fill="#e0564a" stroke="#8e2a21" stroke-width="1.6"/><circle cx="17" cy="11" r="3" fill="#ffd9d4"/></svg>',
+  cannon:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="4" y="6" width="22" height="10" rx="4" fill="#33424d" transform="rotate(-14 15 11)"/><rect x="23" y="4" width="4" height="9" rx="1.5" fill="#9fb7c9" transform="rotate(-14 25 8)"/><circle cx="9" cy="16" r="4.5" fill="#56707f"/></svg>',
+  magnet:'<svg width="34" height="22" viewBox="0 0 34 22"><path d="M11 16 V9 a6 6 0 0 1 12 0 V16" fill="none" stroke="#e0564a" stroke-width="5"/><rect x="8.5" y="14" width="5" height="4" fill="#dce9f2"/><rect x="20.5" y="14" width="5" height="4" fill="#dce9f2"/></svg>',
 };
 function renderToolbox(){
   const list = document.getElementById('partList');
@@ -765,7 +873,7 @@ function canvasPos(e){
 function hitPart(x,y){
   for(let i=placed.length-1;i>=0;i--){
     const p = placed[i];
-    if(p.type==='fan'||p.type==='bumper'){
+    if(p.type==='fan'||p.type==='bumper'||p.type==='cannon'||p.type==='magnet'){
       if(Math.hypot(x-p.x,y-p.y)<30) return p;
     }else{
       const [a,b]=segEnds(p);
