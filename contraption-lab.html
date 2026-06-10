@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contraption Lab — a tiny Incredible Machine tribute</title>
+<style>
+  :root{
+    --bp-deep:#16324a;      /* blueprint canvas */
+    --bp-line:#2a4d6b;      /* grid lines */
+    --paper:#e9ddc3;        /* kraft paper toolbox */
+    --paper-dark:#d8c9a8;
+    --ink:#27343f;
+    --chalk:#dce9f2;
+    --wood:#c98a4b;
+    --wood-dark:#8f5a2b;
+    --tramp:#36c2a4;
+    --fan:#9fb7c9;
+    --belt:#5a6b7a;
+    --bumper:#e0564a;
+    --accent:#ffb648;
+    --good:#49c26b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+    background:#0e2233;
+    color:var(--chalk);
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+  }
+  header{
+    width:100%; max-width:1180px;
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+    padding:14px 18px 6px;
+  }
+  header h1{
+    margin:0; font-size:22px; letter-spacing:.5px; font-weight:800;
+    color:var(--accent);
+  }
+  header h1 span{color:var(--chalk); font-weight:500;}
+  #levelName{font-size:15px; opacity:.9;}
+  #dots{margin-left:auto; display:flex; gap:6px; align-items:center;}
+  .dot{
+    width:22px;height:22px;border-radius:6px;border:1px solid var(--bp-line);
+    background:transparent;color:var(--chalk);font-size:11px;font-weight:700;
+    cursor:pointer; padding:0; font-family:inherit;
+  }
+  .dot:disabled{opacity:.3;cursor:default;}
+  .dot.current{background:var(--accent);color:var(--ink);border-color:var(--accent);}
+  .dot.done{border-color:var(--good); color:var(--good);}
+  #wrap{
+    width:100%; max-width:1180px;
+    display:flex; gap:12px; padding:8px 18px 18px;
+    align-items:stretch;
+  }
+  #stage{position:relative; flex:1; min-width:0;}
+  canvas{
+    display:block; width:100%; height:auto;
+    background:var(--bp-deep);
+    border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45), inset 0 0 0 1px var(--bp-line);
+    touch-action:none;
+  }
+  #hud{
+    display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;
+  }
+  button.ctrl{
+    font-family:inherit; font-weight:700; font-size:14px;
+    border:none; border-radius:9px; padding:9px 16px; cursor:pointer;
+    background:var(--bp-line); color:var(--chalk);
+  }
+  button.ctrl:hover{filter:brightness(1.15);}
+  #playBtn{background:var(--good); color:#0c2616;}
+  #hint{
+    font-size:13px; opacity:.8; line-height:1.4; flex-basis:100%;
+  }
+  kbd{
+    background:var(--bp-line); border-radius:4px; padding:1px 5px; font-size:11px;
+    font-family:inherit;
+  }
+  /* ---------- toolbox ---------- */
+  #toolbox{
+    width:188px; flex-shrink:0;
+    background:linear-gradient(160deg, var(--paper), var(--paper-dark));
+    border-radius:12px; padding:12px;
+    color:var(--ink);
+    box-shadow:0 8px 30px rgba(0,0,0,.45);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  #toolbox h2{
+    margin:0 0 2px; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    border-bottom:2px dashed rgba(39,52,63,.3); padding-bottom:6px;
+  }
+  .part{
+    display:flex; align-items:center; gap:10px;
+    background:rgba(255,255,255,.45);
+    border:1.5px solid rgba(39,52,63,.25);
+    border-radius:9px; padding:7px 9px; cursor:grab;
+    font-family:inherit; text-align:left; width:100%;
+  }
+  .part:hover{border-color:var(--ink);}
+  .part:disabled{opacity:.35; cursor:default;}
+  .part svg{flex-shrink:0;}
+  .part .nm{font-weight:700; font-size:13px;}
+  .part .ds{font-size:10.5px; opacity:.75; line-height:1.2;}
+  .part .ct{
+    margin-left:auto; font-weight:800; font-size:13px;
+    background:var(--ink); color:var(--paper);
+    border-radius:6px; min-width:22px; text-align:center; padding:2px 4px;
+  }
+  #selTools{display:none; gap:6px; margin-top:2px;}
+  #selTools.show{display:flex;}
+  #selTools button{
+    flex:1; font-family:inherit; font-weight:700; font-size:13px;
+    border:1.5px solid rgba(39,52,63,.35); background:rgba(255,255,255,.5);
+    color:var(--ink); border-radius:8px; padding:7px 0; cursor:pointer;
+  }
+  #selTools button:hover{border-color:var(--ink);}
+  #tbHint{font-size:10.5px; opacity:.65; line-height:1.35; margin-top:auto;}
+  /* ---------- overlay ---------- */
+  #overlay{
+    position:absolute; inset:0; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(10,24,36,.72); border-radius:12px;
+    backdrop-filter:blur(2px);
+  }
+  #overlay.show{display:flex;}
+  #ovCard{
+    background:var(--paper); color:var(--ink);
+    border-radius:14px; padding:26px 34px; text-align:center;
+    box-shadow:0 14px 50px rgba(0,0,0,.5);
+    transform:rotate(-1deg);
+  }
+  #ovCard h3{margin:0 0 6px; font-size:24px;}
+  #ovCard p{margin:0 0 16px; font-size:14px; opacity:.8;}
+  #ovCard button{
+    font-family:inherit; font-weight:800; font-size:15px;
+    background:var(--ink); color:var(--paper); border:none;
+    border-radius:9px; padding:10px 22px; cursor:pointer;
+  }
+  #toast{
+    position:absolute; left:50%; top:14px; transform:translateX(-50%);
+    background:var(--paper); color:var(--ink);
+    font-size:13px; font-weight:700; border-radius:9px; padding:8px 16px;
+    opacity:0; transition:opacity .25s; pointer-events:none;
+    box-shadow:0 6px 20px rgba(0,0,0,.4);
+    max-width:80%; text-align:center;
+  }
+  #toast.show{opacity:1;}
+  @media (max-width:760px){
+    #wrap{flex-direction:column;}
+    #toolbox{width:100%; flex-direction:row; flex-wrap:wrap;}
+    #toolbox h2{flex-basis:100%;}
+    .part{width:calc(50% - 4px);}
+    #selTools{flex-basis:100%;}
+    #tbHint{display:none;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contraption Lab <span>· a tiny tribute to The Incredible Machine</span></h1>
+  <div id="levelName"></div>
+  <div id="dots"></div>
+</header>
+
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv" width="900" height="560"></canvas>
+    <div id="hud">
+      <button class="ctrl" id="playBtn">▶ Run machine</button>
+      <button class="ctrl" id="resetBtn">⟲ Reset ball</button>
+      <button class="ctrl" id="clearBtn">✕ Clear parts</button>
+      <div id="hint"></div>
+    </div>
+    <div id="overlay">
+      <div id="ovCard">
+        <h3 id="ovTitle">Level complete!</h3>
+        <p id="ovText">Beautiful contraption.</p>
+        <button id="ovBtn">Next level →</button>
+      </div>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <aside id="toolbox">
+    <h2>Parts crate</h2>
+    <div id="partList"></div>
+    <div id="selTools">
+      <button id="rotL" title="Rotate left">⟲</button>
+      <button id="rotR" title="Rotate right">⟳</button>
+      <button id="delBtn" title="Return to crate">🗑</button>
+    </div>
+    <div id="tbHint">
+      Click a part, then click the blueprint to place it.<br>
+      Drag parts to move · scroll or <kbd>R</kbd>/<kbd>Shift R</kbd> to rotate · <kbd>Del</kbd> returns a part.
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   CONTRAPTION LAB — tiny Rube-Goldberg puzzler, original code & art
+   ============================================================ */
+const W = 900, H = 560, BALL_R = 12, GRAV = 920;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+/* ---------- part catalogue ---------- */
+const PARTS = {
+  plank:   { name:'Plank',      desc:'Solid wooden board', len:130 },
+  tramp:   { name:'Trampoline', desc:'Big bouncy bounce',  len:104 },
+  conveyor:{ name:'Conveyor',   desc:'Carries the ball along', len:150 },
+  fan:     { name:'Fan',        desc:'Blows a steady gust', len:0 },
+  bumper:  { name:'Bumper',     desc:'Pinball kick!',      len:0 },
+};
+
+/* ---------- levels ---------- */
+function pl(x,y,len,angle,thick){return {kind:'plank',x,y,len,angle:(angle||0)*Math.PI/180,thick:thick||10};}
+const LEVELS = [
+ { name:'1 · First Drop',
+   hint:'The ball drops straight down. Slip a plank underneath it, tilted toward the bucket. Rotate with scroll, <kbd>R</kbd>, or the ⟲ ⟳ buttons.',
+   ball:{x:300,y:70}, bucket:{x:560,y:485},
+   statics:[ pl(450,548,900,0,14) ],
+   parts:{plank:1} },
+
+ { name:'2 · Across the Gap',
+   hint:'Three planks. Build a downhill road — and remember the ball has to <b>drop into</b> the bucket from above, so let the last plank launch it over the rim.',
+   ball:{x:110,y:70}, bucket:{x:740,y:485},
+   statics:[ pl(450,548,900,0,14) ],
+   parts:{plank:3} },
+
+ { name:'3 · Boing!',
+   hint:'That wall is too tall to roll past… but not too tall to <b>bounce</b> over. Tilt the trampoline slightly to aim the bounce.',
+   ball:{x:150,y:70}, bucket:{x:730,y:485},
+   statics:[ pl(450,548,900,0,14), pl(460,400,300,90,16) ],
+   parts:{tramp:1, plank:1} },
+
+ { name:'4 · Wind Power',
+   hint:'The ball rolls off the ledge into nothing. A fan blows a steady gust in the direction it faces — use it to push the ball mid-air toward the bucket.',
+   ball:{x:140,y:70}, bucket:{x:740,y:485},
+   statics:[ pl(450,548,900,0,14), pl(230,300,220,8,12) ],
+   parts:{fan:1, plank:1} },
+
+ { name:'5 · Assembly Line',
+   hint:'Conveyor belts grab the ball and carry it along the arrows. Rotate one to flip its direction.',
+   ball:{x:130,y:70}, bucket:{x:760,y:485},
+   statics:[ pl(450,548,900,0,14), pl(560,470,160,90,16) ],
+   parts:{conveyor:1, plank:1} },
+
+ { name:'6 · Pinball Wizard',
+   hint:'Bumpers kick the ball away hard, pinball-style. Where you put it decides where the ball flies. Nudge it slightly off-centre!',
+   ball:{x:560,y:60}, bucket:{x:150,y:485},
+   statics:[ pl(450,548,900,0,14), pl(360,470,160,90,16) ],
+   parts:{bumper:1, plank:1} },
+
+ { name:'7 · Up and Over',
+   hint:'A serious wall this time. Trampoline for height, fan for distance — combine them.',
+   ball:{x:140,y:70}, bucket:{x:750,y:485},
+   statics:[ pl(450,548,900,0,14), pl(455,360,380,90,16) ],
+   parts:{tramp:1, fan:1} },
+
+ { name:'8 · The Long Haul',
+   hint:'Two hurdles in the way. Build an elevated express line: ramp on, conveyors across, fly off the end.',
+   ball:{x:90,y:70}, bucket:{x:790,y:485},
+   statics:[ pl(450,548,900,0,14), pl(350,505,90,90,14), pl(600,505,90,90,14) ],
+   parts:{conveyor:2, plank:1} },
+
+ { name:'9 · The Marble Run',
+   hint:'Ride the fixed rails — but mind the gaps between them. Patch the route down to the bucket.',
+   ball:{x:120,y:50}, bucket:{x:160,y:485},
+   statics:[ pl(450,548,900,0,14), pl(250,200,300,12,12), pl(650,330,300,-12,12) ],
+   parts:{plank:2, tramp:1} },
+
+ { name:'10 · Grand Finale',
+   hint:'Everything in the crate, one floating bucket on a high shelf. There are many ways to win — invent yours!',
+   ball:{x:90,y:60}, bucket:{x:660,y:196},
+   statics:[ pl(450,548,900,0,14), pl(320,420,260,90,16), pl(640,252,210,0,12) ],
+   parts:{plank:2, tramp:1, fan:1, conveyor:1, bumper:1} },
+];
+
+/* ---------- state ---------- */
+let levelIdx = 0;
+let unlocked = 0;                 // highest playable level index
+let crate = {};                   // remaining counts
+let placed = [];                  // placed parts {type,x,y,angle,id}
+let nextId = 1;
+let selected = null;              // placed part being edited
+let carrying = null;              // part following the cursor (not yet placed)
+let dragging = false;
+let mode = 'edit';                // edit | run
+let ball = {x:0,y:0,vx:0,vy:0};
+let trail = [];
+let dwell = 0, stuckT = 0, runT = 0;
+let lastFrame = 0, acc = 0;
+let mouse = {x:0,y:0};
+
+/* ---------- tiny synth ---------- */
+let AC = null;
+function blip(freq, dur, type, vol){
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type||'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol||0.08, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + (dur||0.12));
+    o.connect(g).connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + (dur||0.12));
+  }catch(e){}
+}
+
+/* ---------- geometry helpers ---------- */
+function segEnds(p){
+  const def = PARTS[p.type]; const len = p.len || (def?def.len:120);
+  const c = Math.cos(p.angle), s = Math.sin(p.angle);
+  return [{x:p.x-c*len/2, y:p.y-s*len/2},{x:p.x+c*len/2, y:p.y+s*len/2}];
+}
+function closestOnSeg(px,py,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy;
+  let t = L2? ((px-a.x)*dx+(py-a.y)*dy)/L2 : 0;
+  t = Math.max(0,Math.min(1,t));
+  return {x:a.x+dx*t, y:a.y+dy*t};
+}
+
+/* all collidable segments: statics + placed surface parts + bucket walls */
+function allSegments(){
+  const segs = [];
+  const lv = LEVELS[levelIdx];
+  for(const s of lv.statics){
+    const [a,b]=segEnds({type:null,x:s.x,y:s.y,angle:s.angle,len:s.len});
+    segs.push({a,b,kind:'static',thick:s.thick});
+  }
+  for(const p of placed){
+    if(p.type==='plank'||p.type==='tramp'||p.type==='conveyor'){
+      const [a,b]=segEnds(p);
+      segs.push({a,b,kind:p.type,part:p});
+    }
+  }
+  // bucket: two slanted walls + bottom
+  const bx=lv.bucket.x, by=lv.bucket.y, hw=38, hwB=28, hh=56;
+  segs.push({a:{x:bx-hw,y:by},      b:{x:bx-hwB,y:by+hh}, kind:'bucket'});
+  segs.push({a:{x:bx+hw,y:by},      b:{x:bx+hwB,y:by+hh}, kind:'bucket'});
+  segs.push({a:{x:bx-hwB,y:by+hh},  b:{x:bx+hwB,y:by+hh}, kind:'bucket'});
+  return segs;
+}
+
+/* ---------- physics ---------- */
+function resetBall(){
+  const lv = LEVELS[levelIdx];
+  ball = {x:lv.ball.x, y:lv.ball.y, vx:0, vy:0};
+  trail = []; dwell=0; stuckT=0; runT=0;
+}
+function physStep(dt){
+  runT += dt;
+  // fans
+  for(const p of placed){
+    if(p.type!=='fan') continue;
+    const dx=ball.x-p.x, dy=ball.y-p.y;
+    const c=Math.cos(p.angle), s=Math.sin(p.angle);
+    const along = dx*c+dy*s, perp = -dx*s+dy*c;
+    if(along>10 && along<220 && Math.abs(perp)<58){
+      const f = 900*(1-along/220);
+      ball.vx += c*f*dt; ball.vy += s*f*dt;
+    }
+  }
+  ball.vy += GRAV*dt;
+  ball.x += ball.vx*dt; ball.y += ball.vy*dt;
+
+  // segment collisions
+  for(const seg of allSegments()){
+    const q = closestOnSeg(ball.x, ball.y, seg.a, seg.b);
+    let nx = ball.x-q.x, ny = ball.y-q.y;
+    const d = Math.hypot(nx,ny);
+    const pad = BALL_R + (seg.thick?seg.thick/2-4:0);
+    if(d===0 || d>=pad) continue;
+    nx/=d; ny/=d;
+    // push out
+    ball.x = q.x + nx*pad; ball.y = q.y + ny*pad;
+    const vn = ball.vx*nx + ball.vy*ny;
+    let tx=-ny, ty=nx;
+    let vt = ball.vx*tx + ball.vy*ty;
+    if(vn < 0){
+      let outN;
+      if(seg.kind==='tramp'){
+        outN = Math.min(Math.max(-vn*1.02, 470), 980);
+        if(-vn>60) blip(180,0.12,'sine',0.1);
+      }else{
+        outN = -vn*0.35;
+        if(-vn>140) blip(420,0.05,'triangle',0.04);
+      }
+      // conveyor drags tangentially toward belt speed
+      if(seg.kind==='conveyor'){
+        const p=seg.part, c=Math.cos(p.angle), s=Math.sin(p.angle);
+        const beltDir = (tx*c+ty*s)>=0 ? 1 : -1;
+        const belt = 260*beltDir;
+        vt += (belt-vt)*0.5;
+      }else{
+        vt *= 0.999;
+      }
+      ball.vx = nx*outN + tx*vt;
+      ball.vy = ny*outN + ty*vt;
+    }
+  }
+  // bumpers
+  for(const p of placed){
+    if(p.type!=='bumper') continue;
+    let nx=ball.x-p.x, ny=ball.y-p.y;
+    const d=Math.hypot(nx,ny), rr=BALL_R+22;
+    if(d===0||d>=rr) continue;
+    nx/=d; ny/=d;
+    ball.x = p.x+nx*rr; ball.y = p.y+ny*rr;
+    const vn = ball.vx*nx+ball.vy*ny;
+    if(vn<0){ ball.vx -= 2*vn*nx; ball.vy -= 2*vn*ny; }
+    ball.vx += nx*260; ball.vy += ny*260;
+    p.flash = 0.2;
+    blip(700,0.09,'square',0.06);
+  }
+  // speed cap
+  const sp = Math.hypot(ball.vx,ball.vy);
+  if(sp>1150){ ball.vx*=1150/sp; ball.vy*=1150/sp; }
+
+  // win check (inside bucket, briefly)
+  const lv = LEVELS[levelIdx], b=lv.bucket;
+  if(Math.abs(ball.x-b.x)<24 && ball.y>b.y+8 && ball.y<b.y+52){
+    dwell += dt;
+    if(dwell>0.25) return 'win';
+  }else dwell = 0;
+
+  // fail checks
+  if(ball.y > H+60 || ball.x < -80 || ball.x > W+80) return 'fall';
+  if(Math.hypot(ball.vx,ball.vy) < 16 && dwell===0){
+    stuckT += dt;
+    if(stuckT > 2.2) return 'stuck';
+  }else stuckT = 0;
+  if(runT > 30) return 'timeout';
+  return null;
+}
+
+/* ---------- drawing ---------- */
+function rr(x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawGrid(){
+  ctx.strokeStyle = 'rgba(90,140,180,0.14)';
+  ctx.lineWidth = 1;
+  for(let x=0;x<=W;x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<=H;y+=40){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  // corner stamp
+  ctx.fillStyle='rgba(220,233,242,0.22)';
+  ctx.font='10px ui-rounded, system-ui';
+  ctx.fillText('DWG № '+(levelIdx+1)+'/10 · CONTRAPTION LAB', 12, H-10);
+}
+function drawSeg(x,y,len,angle,kind,thick,part,t){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(angle);
+  if(kind==='static'){
+    ctx.fillStyle='#23445f';
+    rr(-len/2,-(thick/2),len,thick,4); ctx.fill();
+    ctx.strokeStyle='rgba(220,233,242,.35)'; ctx.lineWidth=1.5;
+    rr(-len/2,-(thick/2),len,thick,4); ctx.stroke();
+    // hatching
+    ctx.strokeStyle='rgba(220,233,242,.13)';
+    for(let i=-len/2+8;i<len/2-4;i+=14){
+      ctx.beginPath(); ctx.moveTo(i,-thick/2+2); ctx.lineTo(i+6,thick/2-2); ctx.stroke();
+    }
+  }else if(kind==='plank'){
+    ctx.fillStyle='#c98a4b'; rr(-len/2,-7,len,14,5); ctx.fill();
+    ctx.fillStyle='rgba(143,90,43,.5)'; rr(-len/2,1,len,6,4); ctx.fill();
+    ctx.strokeStyle='#6d431f'; ctx.lineWidth=2; rr(-len/2,-7,len,14,5); ctx.stroke();
+    ctx.fillStyle='#6d431f';
+    ctx.beginPath(); ctx.arc(-len/2+12,0,2.4,0,7); ctx.arc(len/2-12,0,2.4,0,7); ctx.fill();
+  }else if(kind==='tramp'){
+    ctx.strokeStyle='#1c6e5c'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(-len/2+6,4); ctx.lineTo(-len/2-6,18); ctx.moveTo(len/2-6,4); ctx.lineTo(len/2+6,18); ctx.stroke();
+    ctx.fillStyle='#36c2a4'; rr(-len/2,-7,len,12,6); ctx.fill();
+    ctx.strokeStyle='#0f4a3d'; ctx.lineWidth=2; rr(-len/2,-7,len,12,6); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(-len/2+8,-2); ctx.lineTo(len/2-8,-2); ctx.stroke();
+  }else if(kind==='conveyor'){
+    ctx.fillStyle='#3c4a57'; rr(-len/2,-9,len,18,9); ctx.fill();
+    ctx.strokeStyle='#1f2830'; ctx.lineWidth=2; rr(-len/2,-9,len,18,9); ctx.stroke();
+    ctx.fillStyle='#9fb7c9';
+    ctx.beginPath(); ctx.arc(-len/2+9,0,4.5,0,7); ctx.arc(len/2-9,0,4.5,0,7); ctx.fill();
+    // moving arrows
+    const off = (t*60)%24;
+    ctx.strokeStyle='#ffb648'; ctx.lineWidth=2.5; ctx.lineCap='round';
+    for(let i=-len/2+14+off;i<len/2-10;i+=24){
+      ctx.beginPath(); ctx.moveTo(i-4,-3.5); ctx.lineTo(i+2,0); ctx.lineTo(i-4,3.5); ctx.stroke();
+    }
+    ctx.lineCap='butt';
+  }else if(kind==='fan'){
+    // gust zone
+    ctx.strokeStyle='rgba(159,183,201,.35)'; ctx.setLineDash([5,6]); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(14,-30); ctx.lineTo(220,-52); ctx.moveTo(14,30); ctx.lineTo(220,52); ctx.stroke();
+    ctx.setLineDash([]);
+    // gust streaks
+    for(let i=0;i<3;i++){
+      const a = ((t*140)+i*70)%200 + 18;
+      ctx.strokeStyle='rgba(220,233,242,'+(0.5*(1-a/220))+')'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(a, (i-1)*16); ctx.lineTo(a+16,(i-1)*16); ctx.stroke();
+    }
+    // body
+    ctx.fillStyle='#56707f'; rr(-18,-22,24,44,7); ctx.fill();
+    ctx.strokeStyle='#22323c'; ctx.lineWidth=2; rr(-18,-22,24,44,7); ctx.stroke();
+    ctx.fillStyle='#9fb7c9'; rr(2,-16,12,32,4); ctx.fill();
+    ctx.save(); ctx.translate(-6,0); ctx.rotate(t*9);
+    ctx.fillStyle='#dce9f2';
+    for(let i=0;i<3;i++){ ctx.rotate(Math.PI*2/3); rr(-2.5,2,5,12,2.5); ctx.fill(); }
+    ctx.restore();
+  }else if(kind==='bumper'){
+    const fl = part && part.flash>0 ? part.flash/0.2 : 0;
+    ctx.fillStyle='#e0564a';
+    ctx.beginPath(); ctx.arc(0,0,22+fl*4,0,7); ctx.fill();
+    ctx.strokeStyle='#8e2a21'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,0,22+fl*4,0,7); ctx.stroke();
+    ctx.fillStyle = fl>0 ? '#fff' : '#ffd9d4';
+    ctx.beginPath(); ctx.arc(0,0,9,0,7); ctx.fill();
+    ctx.fillStyle='#e0564a'; ctx.font='bold 10px ui-rounded, system-ui';
+    ctx.textAlign='center'; ctx.fillText('!',0,3.5); ctx.textAlign='left';
+  }
+  ctx.restore();
+}
+function drawBucket(b){
+  ctx.save(); ctx.translate(b.x,b.y);
+  ctx.fillStyle='rgba(255,182,72,.12)';
+  ctx.beginPath(); ctx.moveTo(-38,0); ctx.lineTo(38,0); ctx.lineTo(28,56); ctx.lineTo(-28,56); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#ffb648'; ctx.lineWidth=4; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(-38,0); ctx.lineTo(-28,56); ctx.lineTo(28,56); ctx.lineTo(38,0); ctx.stroke();
+  ctx.strokeStyle='rgba(255,182,72,.5)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-34,14); ctx.lineTo(34,14); ctx.stroke();
+  ctx.fillStyle='#ffb648'; ctx.font='bold 11px ui-rounded, system-ui'; ctx.textAlign='center';
+  ctx.fillText('GOAL', 0, 74); ctx.textAlign='left';
+  ctx.restore();
+}
+function drawBall(x,y,ghost){
+  ctx.save(); ctx.translate(x,y);
+  if(ghost){
+    ctx.strokeStyle='rgba(220,233,242,.6)'; ctx.setLineDash([4,4]); ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(0,0,BALL_R,0,7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(220,233,242,.5)'; ctx.font='10px ui-rounded, system-ui';
+    ctx.textAlign='center'; ctx.fillText('ball', 0, -BALL_R-6); ctx.textAlign='left';
+  }else{
+    ctx.fillStyle='#dce9f2';
+    ctx.beginPath(); ctx.arc(0,0,BALL_R,0,7); ctx.fill();
+    ctx.fillStyle='#9fb7c9';
+    ctx.beginPath(); ctx.arc(3,4,BALL_R-5,0,7); ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(-4,-4,4,0,7); ctx.fill();
+    ctx.strokeStyle='#56707f'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(0,0,BALL_R,0,7); ctx.stroke();
+  }
+  ctx.restore();
+}
+let tGlobal = 0;
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  const lv = LEVELS[levelIdx];
+  for(const s of lv.statics) drawSeg(s.x,s.y,s.len,s.angle,'static',s.thick,null,tGlobal);
+  drawBucket(lv.bucket);
+  // trail
+  if(mode==='run'){
+    ctx.strokeStyle='rgba(255,182,72,.35)'; ctx.lineWidth=2;
+    ctx.beginPath();
+    trail.forEach((p,i)=>{ i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); });
+    ctx.stroke();
+  }
+  for(const p of placed){
+    if(p.flash) p.flash = Math.max(0, p.flash-0.016);
+    const len = p.len || PARTS[p.type].len;
+    drawSeg(p.x,p.y,len,p.angle,p.type,0,p,tGlobal);
+    if(p===selected && mode==='edit'){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.angle);
+      ctx.strokeStyle='#ffb648'; ctx.setLineDash([5,4]); ctx.lineWidth=2;
+      const hw = Math.max(len/2+10, 32);
+      rr(-hw,-26,hw*2,52,10); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+  if(carrying){
+    ctx.globalAlpha = .75;
+    const len = carrying.len || PARTS[carrying.type].len;
+    drawSeg(carrying.x,carrying.y,len,carrying.angle,carrying.type,0,carrying,tGlobal);
+    ctx.globalAlpha = 1;
+  }
+  if(mode==='run'){ drawBall(ball.x,ball.y,false); }
+  else { drawBall(lv.ball.x,lv.ball.y,true); }
+}
+
+/* ---------- main loop ---------- */
+function frame(ts){
+  if(!lastFrame) lastFrame = ts;
+  let dt = Math.min(0.05,(ts-lastFrame)/1000);
+  lastFrame = ts;
+  tGlobal += dt;
+  if(mode==='run'){
+    acc += dt;
+    const h = 1/240;
+    let result = null;
+    while(acc > h && !result){
+      result = physStep(h);
+      acc -= h;
+      trail.push({x:ball.x,y:ball.y});
+      if(trail.length>240) trail.shift();
+    }
+    if(result) endRun(result);
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+function endRun(result){
+  if(result==='win'){
+    mode='edit';
+    blip(523,0.12,'triangle',0.1); setTimeout(()=>blip(659,0.12,'triangle',0.1),110);
+    setTimeout(()=>blip(784,0.2,'triangle',0.12),220);
+    const last = levelIdx===LEVELS.length-1;
+    document.getElementById('ovTitle').textContent = last ? 'Machine mastered! 🏆' : 'Level complete!';
+    document.getElementById('ovText').textContent = last
+      ? 'All ten contraptions built. Rube Goldberg salutes you.'
+      : pickPraise();
+    document.getElementById('ovBtn').textContent = last ? '⟲ Play again from level 1' : 'Next level →';
+    document.getElementById('overlay').classList.add('show');
+    unlocked = Math.max(unlocked, Math.min(levelIdx+1, LEVELS.length-1));
+    LEVELS[levelIdx].done = true;
+    renderDots();
+  }else{
+    mode='edit';
+    resetBall();
+    const msgs = {
+      fall:'Off the edge it goes… adjust and run it again!',
+      stuck:'The ball got stuck. Steepen a ramp or add some push.',
+      timeout:'Time’s up — the machine is dawdling. Tweak it!',
+    };
+    toast(msgs[result]||'Try again!');
+    updateHud();
+  }
+  updateHud();
+}
+const PRAISE = ['Beautiful contraption.','Gloriously over-engineered.','The physics gods smile upon you.','Smooth as a greased marble.','Patent pending!'];
+function pickPraise(){ return PRAISE[Math.floor(Math.random()*PRAISE.length)]; }
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* ---------- level / UI management ---------- */
+function loadLevel(i){
+  levelIdx = i;
+  const lv = LEVELS[i];
+  crate = Object.assign({}, lv.parts);
+  placed = []; selected = null; carrying = null;
+  mode = 'edit';
+  resetBall();
+  document.getElementById('levelName').innerHTML = lv.name;
+  document.getElementById('hint').innerHTML = lv.hint;
+  document.getElementById('overlay').classList.remove('show');
+  renderToolbox(); renderDots(); updateHud();
+}
+function renderDots(){
+  const d = document.getElementById('dots');
+  d.innerHTML='';
+  LEVELS.forEach((lv,i)=>{
+    const b = document.createElement('button');
+    b.className = 'dot' + (i===levelIdx?' current':'') + (lv.done?' done':'');
+    b.textContent = i+1;
+    b.disabled = i>unlocked;
+    b.onclick = ()=>loadLevel(i);
+    d.appendChild(b);
+  });
+}
+const PART_ICONS = {
+  plank:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="2" y="7" width="30" height="8" rx="3" fill="#c98a4b" stroke="#6d431f" stroke-width="1.5" transform="rotate(-8 17 11)"/></svg>',
+  tramp:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="4" y="7" width="26" height="7" rx="3.5" fill="#36c2a4" stroke="#0f4a3d" stroke-width="1.5"/><path d="M7 14 L4 19 M27 14 L30 19" stroke="#1c6e5c" stroke-width="2"/></svg>',
+  conveyor:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="2" y="7" width="30" height="9" rx="4.5" fill="#3c4a57"/><circle cx="7" cy="11.5" r="2.2" fill="#9fb7c9"/><circle cx="27" cy="11.5" r="2.2" fill="#9fb7c9"/><path d="M14 9 l3 2.5 -3 2.5" stroke="#ffb648" stroke-width="1.6" fill="none"/></svg>',
+  fan:'<svg width="34" height="22" viewBox="0 0 34 22"><rect x="4" y="3" width="12" height="16" rx="3" fill="#56707f"/><circle cx="10" cy="11" r="4" fill="#dce9f2"/><path d="M19 7h9M19 11h12M19 15h9" stroke="#9fb7c9" stroke-width="1.6"/></svg>',
+  bumper:'<svg width="34" height="22" viewBox="0 0 34 22"><circle cx="17" cy="11" r="8.5" fill="#e0564a" stroke="#8e2a21" stroke-width="1.6"/><circle cx="17" cy="11" r="3" fill="#ffd9d4"/></svg>',
+};
+function renderToolbox(){
+  const list = document.getElementById('partList');
+  list.innerHTML='';
+  const lv = LEVELS[levelIdx];
+  Object.keys(lv.parts).forEach(type=>{
+    const btn = document.createElement('button');
+    btn.className='part';
+    btn.disabled = mode!=='edit' || crate[type]<=0;
+    btn.innerHTML = PART_ICONS[type] +
+      '<span><span class="nm">'+PARTS[type].name+'</span><br><span class="ds">'+PARTS[type].desc+'</span></span>'+
+      '<span class="ct">×'+crate[type]+'</span>';
+    btn.onclick = ()=>{
+      if(mode!=='edit' || crate[type]<=0) return;
+      crate[type]--;
+      selected = null;
+      carrying = {type, x:mouse.x||W/2, y:mouse.y||H/2, angle:0, id:nextId++};
+      renderToolbox(); updateSelTools();
+    };
+    list.appendChild(btn);
+  });
+}
+function updateSelTools(){
+  document.getElementById('selTools').classList.toggle('show', !!(selected||carrying));
+}
+function updateHud(){
+  document.getElementById('playBtn').textContent = mode==='run' ? '⏹ Stop' : '▶ Run machine';
+  renderToolbox();
+}
+
+/* ---------- controls ---------- */
+document.getElementById('playBtn').onclick = ()=>{
+  if(mode==='run'){ mode='edit'; resetBall(); }
+  else{
+    if(carrying) dropCarrying();
+    selected=null; updateSelTools();
+    resetBall(); mode='run'; acc=0;
+    blip(330,0.07,'triangle',0.06);
+  }
+  updateHud();
+};
+document.getElementById('resetBtn').onclick = ()=>{ mode='edit'; resetBall(); updateHud(); };
+document.getElementById('clearBtn').onclick = ()=>{
+  if(mode==='run') return;
+  for(const p of placed) crate[p.type]++;
+  if(carrying){ crate[carrying.type]++; carrying=null; }
+  placed=[]; selected=null;
+  renderToolbox(); updateSelTools();
+};
+document.getElementById('ovBtn').onclick = ()=>{
+  const last = levelIdx===LEVELS.length-1;
+  loadLevel(last?0:levelIdx+1);
+};
+function rotateTarget(dir){
+  const t = carrying||selected;
+  if(t){ t.angle += dir*Math.PI/12; }
+}
+document.getElementById('rotL').onclick = ()=>rotateTarget(-1);
+document.getElementById('rotR').onclick = ()=>rotateTarget(1);
+document.getElementById('delBtn').onclick = ()=>{
+  if(carrying){ crate[carrying.type]++; carrying=null; }
+  else if(selected){ crate[selected.type]++; placed = placed.filter(p=>p!==selected); selected=null; }
+  renderToolbox(); updateSelTools();
+};
+window.addEventListener('keydown', e=>{
+  if(e.key==='r'||e.key==='R'){ rotateTarget(e.shiftKey?-1:1); e.preventDefault(); }
+  if(e.key==='Delete'||e.key==='Backspace'){
+    if(selected||carrying){ document.getElementById('delBtn').onclick(); e.preventDefault(); }
+  }
+  if(e.key===' '){ document.getElementById('playBtn').onclick(); e.preventDefault(); }
+});
+
+/* ---------- pointer interaction ---------- */
+function canvasPos(e){
+  const r = cv.getBoundingClientRect();
+  const cx = (e.touches? e.touches[0].clientX : e.clientX);
+  const cy = (e.touches? e.touches[0].clientY : e.clientY);
+  return { x:(cx-r.left)*W/r.width, y:(cy-r.top)*H/r.height };
+}
+function hitPart(x,y){
+  for(let i=placed.length-1;i>=0;i--){
+    const p = placed[i];
+    if(p.type==='fan'||p.type==='bumper'){
+      if(Math.hypot(x-p.x,y-p.y)<30) return p;
+    }else{
+      const [a,b]=segEnds(p);
+      const q=closestOnSeg(x,y,a,b);
+      if(Math.hypot(x-q.x,y-q.y)<16) return p;
+    }
+  }
+  return null;
+}
+function dropCarrying(){
+  if(!carrying) return;
+  carrying.x = Math.max(20,Math.min(W-20,carrying.x));
+  carrying.y = Math.max(20,Math.min(H-20,carrying.y));
+  placed.push(carrying);
+  selected = carrying;
+  carrying = null;
+  updateSelTools();
+}
+function pointerDown(e){
+  if(e.touches) e.preventDefault();
+  mouse = canvasPos(e);
+  if(mode!=='edit') return;
+  if(carrying){ carrying.x=mouse.x; carrying.y=mouse.y; dropCarrying(); return; }
+  const p = hitPart(mouse.x,mouse.y);
+  selected = p;
+  dragging = !!p;
+  updateSelTools();
+}
+function pointerMove(e){
+  if(e.touches && (carrying||dragging)) e.preventDefault();
+  mouse = canvasPos(e);
+  if(carrying){ carrying.x=mouse.x; carrying.y=mouse.y; }
+  else if(dragging && selected && mode==='edit'){
+    selected.x = Math.max(20,Math.min(W-20,mouse.x));
+    selected.y = Math.max(20,Math.min(H-20,mouse.y));
+  }
+}
+function pointerUp(){ dragging=false; }
+cv.addEventListener('mousedown',pointerDown);
+window.addEventListener('mousemove',pointerMove);
+window.addEventListener('mouseup',pointerUp);
+cv.addEventListener('touchstart',pointerDown,{passive:false});
+cv.addEventListener('touchmove',pointerMove,{passive:false});
+window.addEventListener('touchend',pointerUp);
+cv.addEventListener('wheel', e=>{
+  if(mode!=='edit') return;
+  const t = carrying||selected;
+  if(t){ t.angle += (e.deltaY>0?1:-1)*Math.PI/24; e.preventDefault(); }
+},{passive:false});
+cv.addEventListener('dblclick', e=>{
+  if(mode!=='edit') return;
+  const pos = canvasPos(e);
+  const p = hitPart(pos.x,pos.y);
+  if(p){ crate[p.type]++; placed=placed.filter(q=>q!==p); if(selected===p)selected=null; renderToolbox(); updateSelTools(); }
+});
+
+/* ---------- boot ---------- */
+loadLevel(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
